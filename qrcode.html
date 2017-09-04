@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8"/>
+    <title>qrcode scan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+<video id="video" width="320" height="240" autoplay></video>
+<p>
+    <button id="snap">截取图像</button>
+    <button id="close">关闭摄像头</button>
+</p>
+<p><div id="result">- scanning -</div></p>
+<img id="preview" src="">
+</body>
+<script type="text/javascript" src="grid.js"></script>
+<script type="text/javascript" src="version.js"></script>
+<script type="text/javascript" src="detector.js"></script>
+<script type="text/javascript" src="formatinf.js"></script>
+<script type="text/javascript" src="errorlevel.js"></script>
+<script type="text/javascript" src="bitmat.js"></script>
+<script type="text/javascript" src="datablock.js"></script>
+<script type="text/javascript" src="bmparser.js"></script>
+<script type="text/javascript" src="datamask.js"></script>
+<script type="text/javascript" src="rsdecoder.js"></script>
+<script type="text/javascript" src="gf256poly.js"></script>
+<script type="text/javascript" src="gf256.js"></script>
+<script type="text/javascript" src="decoder.js"></script>
+<script type="text/javascript" src="qrcode.js"></script>
+<script type="text/javascript" src="findpat.js"></script>
+<script type="text/javascript" src="alignpat.js"></script>
+<script type="text/javascript" src="databr.js"></script>
+<script type="text/javascript">
+    var video = document.querySelector('video'),
+        canvas = document.createElement("canvas"),
+        context = canvas.getContext('2d'),
+        snap = document.querySelector('#snap'),
+        close = document.querySelector('#close'),
+        preview = document.querySelector('#preview'),
+        mediaStreamTrack;
+
+    var promisifiedOldGUM = function (constraints) {
+
+        // 第一个拿到getUserMedia，如果存在
+        var getUserMedia = (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia);
+
+        // 有些浏览器只是不实现它-返回一个不被拒绝的承诺与一个错误保持一致的接口
+        if (!getUserMedia) {
+            return Promise.reject(new Error('getUserMedia is not implemented in this browser-getUserMedia是不是在这个浏览器实现'));
+        }
+
+        // 否则，调用包在一个旧navigator.getusermedia承诺
+        return new Promise(function (resolve, reject) {
+            getUserMedia.call(navigator, constraints, resolve, reject);
+        });
+
+    }
+
+    // 旧的浏览器可能无法实现mediadevices可言，所以我们设置一个空的对象第一
+    if (navigator.mediaDevices === undefined) {
+        navigator.mediaDevices = {};
+    }
+
+    // 一些浏览器部分实现mediadevices。我们不能只指定一个对象
+    // 随着它将覆盖现有的性能getUserMedia。.
+    // 在这里，我们就要错过添加getUserMedia财产。.
+    if (navigator.mediaDevices.getUserMedia === undefined) {
+        navigator.mediaDevices.getUserMedia = promisifiedOldGUM;
+    }
+
+    // Prefer camera resolution nearest to 1280x720.
+    var constraints = {
+        audio: true,
+        video: {
+            width: 320,
+            height: 240
+        }
+    };
+
+
+    navigator.mediaDevices.getUserMedia(constraints)
+        .then(function (stream) {
+            video.src = window.URL.createObjectURL(stream);
+            video.onloadedmetadata = function (e) {
+                video.play();
+            };
+            mediaStreamTrack = typeof stream.stop === 'function' ? stream : stream.getTracks()[1];
+        }).catch(function (err) {
+        console.log(err.name + ": " + err.message);
+    });
+
+    function htmlEntities(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function read(a) {
+        console.log(a);
+        if(a.indexOf("http://") === 0 || a.indexOf("https://") === 0) {
+            var html="<br>";
+            html+="<a target='_blank' href='"+a+"'>"+a+"</a><br>";
+            html+="<b>"+htmlEntities(a)+"</b><br><br>";
+            document.querySelector("#result").innerHTML=html;
+        }
+        setTimeout(captureToCanvas, 500);
+    }
+
+    function captureToCanvas() {
+        try {
+            canvas.width = 320;
+            canvas.height = 240;
+            context.drawImage(video, 0, 0,320,240);
+            try {
+//                preview.src = canvas.toDataURL();
+                qrcode.decode(canvas.toDataURL());
+            } catch (e) {
+                console.log(e);
+                setTimeout(captureToCanvas, 500);
+            }
+        }  catch(e){
+            console.log(e);
+            setTimeout(captureToCanvas, 500);
+        }
+
+    }
+    qrcode.callback = read;
+    setTimeout(captureToCanvas, 500);
+
+   // 截取图像
+    snap.addEventListener('click', function () {
+        canvas.width = 320;
+        canvas.height = 240;
+        context.drawImage(video, 0, 0, 320, 240);
+        preview.src = canvas.toDataURL();
+        qrcode.decode(canvas.toDataURL());
+        qrcode.callback = read;
+    }, false);
+    // 关闭摄像头
+    close.addEventListener('click', function () {
+        mediaStreamTrack && mediaStreamTrack.stop();
+    }, false);
+</script>
+</html>
